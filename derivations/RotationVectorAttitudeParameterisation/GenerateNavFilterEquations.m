@@ -74,7 +74,7 @@ syms rho real % air density (kg/m^3)
 syms R_ACC real % variance of accelerometer measurements (m/s^2)^2
 syms Kaccx Kaccy real % derivative of X and Y body specific forces wrt componenent of true airspeed along each axis (1/s)
 
-%% define the state prediction equations
+% define the state prediction equations
 
 % define the measured Delta angle and delta velocity vectors
 dAngMeas = [dax; day; daz];
@@ -348,7 +348,7 @@ load('StatePrediction.mat');
 load('temp1.mat');
 load('temp2.mat');
 
-% calculate Kalman gain vector for the X axis
+%% calculate Kalman gain vector for the X axis
 K_LOSX = (P*transpose(H_LOSX))/(H_LOSX*P*transpose(H_LOSX) + R_LOS); % Kalman gain vector
 K_LOSX = subs(K_LOSX, {'rotErrX', 'rotErrY', 'rotErrZ'}, {0,0,0});
 K_LOSX = simplify(K_LOSX);
@@ -371,7 +371,65 @@ fix_c_code('K_LOSY.c');
 % reset workspace
 clear all;
 reset(symengine);
-
+%% derive equation for fusion of local position
+ 
+load('StatePrediction.mat');
+ 
+%calculate measurement matrices for Local X measurement
+%calculate the sin(yaw) and cos(yaw) (first rotation) angle from the 321 rotation sequence
+lpos = transpose(Tbn)*[pn;pe;pd];
+H_LPOSX = jacobian(lpos(1),stateVector); %measurement Jacobian for local posx
+H_LPOSX = subs(H_LPOSX, {'rotErrX', 'rotErrY', 'rotErrZ'}, {0,0,0});
+H_LPOSX = simplify(H_LPOSX);
+save('temp1.mat','H_LPOSX');
+save('lpos.mat','lpos');
+ccode(H_LPOSX,'file','calcH_LPOSX.c');
+fix_c_code('calcH_LPOSX.c');
+ 
+% reset workspace
+clear all;
+reset(symengine);
+ 
+%calculate measurement matrices for Local Y measurement
+load('StatePrediction.mat');
+load('lpos.mat');
+%calculate the sin(yaw) and cos(yaw) (first rotation) angle from the 321 rotation sequence
+H_LPOSY = jacobian(lpos(2),stateVector); %measurement Jacobian for local posy
+H_LPOSY = subs(H_LPOSY, {'rotErrX', 'rotErrY', 'rotErrZ'}, {0,0,0});
+H_LPOSY = simplify(H_LPOSY);
+save('temp2.mat','H_LPOSY');
+ccode(H_LPOSY,'file','calcH_LPOSY.c');
+fix_c_code('calcH_LPOSY.c');
+ 
+% reset workspace
+clear all;
+reset(symengine);
+%% calculate Kalman gain vector for the X axis
+load('StatePrediction.mat');
+load('temp1.mat');
+load('temp2.mat');
+syms R_LPOS real % variance of LOS angular rate mesurements (m)^2
+ 
+K_LPOSX = (P*transpose(H_LPOSX))/(H_LPOSX*P*transpose(H_LPOSX) + R_LPOS); % Kalman gain vector
+K_LPOSX = simplify(K_LPOSX);
+ccode(K_LPOSX,'file','K_LPOSX.c');
+fix_c_code('K_LPOSX.c');
+ 
+clear all;
+reset(symengine);
+%% calculate Kalman gain vector for the X axis
+load('StatePrediction.mat');
+load('temp1.mat');
+load('temp2.mat');
+syms R_LPOS real % variance of LOS angular rate mesurements (m)^2
+ 
+K_LPOSY = (P*transpose(H_LPOSY))/(H_LPOSY*P*transpose(H_LPOSY) + R_LPOS); % Kalman gain vector
+K_LPOSY = simplify(K_LPOSY);
+ccode(K_LPOSY,'file','K_LPOSY.c');
+fix_c_code('K_LPOSY.c');
+ 
+clear all;
+reset(symengine);
 %% derive equations for fusion of 321 sequence yaw measurement
 load('StatePrediction.mat');
 
